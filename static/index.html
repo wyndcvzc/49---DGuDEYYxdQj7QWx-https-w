@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小红书高清主图下载器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+
+        * {
+            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .input-glow:focus {
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3), 0 0 30px rgba(239, 68, 68, 0.1);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary:disabled {
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .image-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .image-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .checkbox-custom {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .checkbox-custom:checked {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            border-color: #ef4444;
+        }
+
+        .checkbox-custom:checked::after {
+            content: "";
+            position: absolute;
+            left: 5px;
+            top: 2px;
+            width: 6px;
+            height: 10px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="text-white">
+    <div class="min-h-screen flex flex-col items-center justify-center px-4 py-12">
+        <!-- 标题区域 -->
+        <div class="text-center mb-12 fade-in">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-white via-red-200 to-white bg-clip-text text-transparent">
+                小红书高清主图下载器
+            </h1>
+            <p class="text-gray-400 text-lg">一键解析下载小红书笔记高清原图 · 无水印 · 无广告</p>
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="w-full max-w-3xl mb-8 fade-in" style="animation-delay: 0.1s;">
+            <div class="glass-card rounded-2xl p-6">
+                <div class="flex flex-col md:flex-row gap-4">
+                    <div class="flex-1 relative">
+                        <input
+                            type="text"
+                            id="urlInput"
+                            placeholder="粘贴小红书笔记链接..."
+                            class="w-full bg-black/30 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-gray-500 outline-none input-glow transition-all"
+                        >
+                    </div>
+                    <div class="flex gap-3">
+                        <button
+                            id="pasteBtn"
+                            onclick="pasteFromClipboard()"
+                            class="btn-secondary px-5 py-4 rounded-xl text-gray-300 flex items-center gap-2"
+                            title="智能识别剪贴板"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                            </svg>
+                            <span class="hidden md:inline">粘贴</span>
+                        </button>
+                        <button
+                            id="parseBtn"
+                            onclick="parseNote()"
+                            class="btn-primary px-8 py-4 rounded-xl text-white font-semibold flex items-center gap-2"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                            <span>解析</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- 状态提示 -->
+                <div id="statusText" class="mt-4 text-center text-sm hidden"></div>
+            </div>
+        </div>
+
+        <!-- 图片预览区域 -->
+        <div id="previewSection" class="w-full max-w-5xl hidden">
+            <div class="glass-card rounded-2xl p-6">
+                <!-- 标题和计数 -->
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h2 id="noteTitle" class="text-xl font-semibold text-white mb-1"></h2>
+                        <p id="imageCount" class="text-gray-400 text-sm"></p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer text-gray-300">
+                            <input type="checkbox" id="selectAll" class="checkbox-custom" checked onclick="toggleSelectAll()">
+                            <span>全选</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 图片网格 -->
+                <div id="imageGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+                </div>
+
+                <!-- 下载按钮 -->
+                <div class="flex flex-col items-center gap-4">
+                    <button
+                        id="downloadBtn"
+                        onclick="downloadImages()"
+                        class="btn-primary px-12 py-4 rounded-xl text-white font-semibold text-lg flex items-center gap-3"
+                    >
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        <span>一键打包下载高清主图 (.zip)</span>
+                    </button>
+                    <!-- 进度条 -->
+                    <div id="progressContainer" class="w-full max-w-md hidden">
+                        <div class="flex justify-between text-sm text-gray-400 mb-2">
+                            <span id="progressText">准备下载...</span>
+                            <span id="progressPercent">0%</span>
+                        </div>
+                        <div class="w-full bg-black/30 rounded-full h-2">
+                            <div id="progressBar" class="progress-bar h-2 rounded-full bg-gradient-to-r from-red-500 to-red-600" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部版权 -->
+        <div class="mt-12 text-center text-gray-500 text-sm">
+            <p>仅供学习交流，请勿用于商业用途</p>
+        </div>
+    </div>
+
+    <script>
+        // 全局状态
+        let currentImages = [];
+        let isDownloading = false;
+
+        // 工具函数：显示状态提示
+        function showStatus(message, type) {
+            const statusEl = document.getElementById("statusText");
+            statusEl.textContent = message;
+            statusEl.classList.remove("hidden", "text-blue-400", "text-green-400", "text-red-400", "text-yellow-400");
+
+            if (type === "success") {
+                statusEl.classList.add("text-green-400");
+            } else if (type === "error") {
+                statusEl.classList.add("text-red-400");
+            } else if (type === "warning") {
+                statusEl.classList.add("text-yellow-400");
+            } else {
+                statusEl.classList.add("text-blue-400");
+            }
+
+            setTimeout(() => {
+                statusEl.classList.add("hidden");
+            }, 5000);
+        }
+
+        // 从剪贴板粘贴
+        async function pasteFromClipboard() {
+            try {
+                const text = await navigator.clipboard.readText();
+                document.getElementById("urlInput").value = text;
+                showStatus("已成功粘贴剪贴板内容", "success");
+            } catch (err) {
+                showStatus("无法访问剪贴板，请手动粘贴", "warning");
+            }
+        }
+
+        // 解析笔记
+        async function parseNote() {
+            const urlInput = document.getElementById("urlInput");
+            const parseBtn = document.getElementById("parseBtn");
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                showStatus("请输入小红书笔记链接", "warning");
+                urlInput.focus();
+                return;
+            }
+
+            // 更新按钮状态
+            parseBtn.disabled = true;
+            parseBtn.innerHTML = '<div class="loading-spinner"></div><span>解析中...</span>';
+            showStatus("正在解析笔记，请稍候...", "info");
+
+            try {
+                const response = await axios.post("/api/parse", { url: url });
+
+                if (response.data.success) {
+                    currentImages = response.data.images || [];
+                    const title = response.data.title || "未命名笔记";
+
+                    document.getElementById("noteTitle").textContent = title;
+                    document.getElementById("imageCount").textContent = "共 " + currentImages.length + " 张高清主图";
+                    document.getElementById("selectAll").checked = true;
+
+                    renderImageGrid();
+                    document.getElementById("previewSection").classList.remove("hidden");
+                    showStatus("解析成功！已获取 " + currentImages.length + " 张图片", "success");
+
+                    // 滚动到预览区域
+                    document.getElementById("previewSection").scrollIntoView({ behavior: "smooth", block: "start" });
+                } else {
+                    showStatus(response.data.message || "解析失败，未找到图片", "error");
+                }
+            } catch (err) {
+                const message = err.response?.data?.message || "网络请求失败，请检查链接是否有效";
+                showStatus(message, "error");
+            } finally {
+                parseBtn.disabled = false;
+                parseBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg><span>解析</span>';
+            }
+        }
+
+        // 渲染图片网格
+        function renderImageGrid() {
+            const grid = document.getElementById("imageGrid");
+            grid.innerHTML = "";
+
+            currentImages.forEach(function(imgUrl, index) {
+                const card = document.createElement("div");
+                card.className = "image-card relative rounded-xl overflow-hidden bg-black/20 fade-in";
+                card.style.animationDelay = index * 0.05 + "s";
+
+                // 从 URL 提取文件名
+                const urlParts = imgUrl.split("/");
+                let fileName = urlParts[urlParts.length - 1] || "image_" + (index + 1);
+                const extension = fileName.includes(".") ? fileName.split(".").pop() : "jpg";
+                const safeName = "IMG_" + String(index + 1).padStart(3, "0") + "." + extension;
+
+                const imgSrc = "/api/proxy?url=" + encodeURIComponent(imgUrl);
+
+                card.innerHTML = '<div class="aspect-square relative">' +
+                    '<img src="' + imgSrc + '" alt="图片 ' + (index + 1) + '" class="w-full h-full object-cover" loading="lazy">' +
+                    '<div class="absolute top-3 left-3"><input type="checkbox" class="checkbox-custom image-checkbox" data-index="' + index + '" checked></div>' +
+                    '<div class="absolute bottom-3 right-3 opacity-0 hover:opacity-100 transition-opacity"><span class="bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-white">' + safeName + '</span></div>' +
+                    '</div>';
+
+                grid.appendChild(card);
+            });
+        }
+
+        // 全选/取消全选
+        function toggleSelectAll() {
+            const selectAll = document.getElementById("selectAll");
+            const checkboxes = document.querySelectorAll(".image-checkbox");
+            checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; });
+        }
+
+        // 监听单个复选框变化
+        document.addEventListener("change", function(e) {
+            if (e.target.classList.contains("image-checkbox")) {
+                const allCheckboxes = document.querySelectorAll(".image-checkbox");
+                const selectAll = document.getElementById("selectAll");
+                const checkedCount = document.querySelectorAll(".image-checkbox:checked").length;
+                selectAll.checked = checkedCount === allCheckboxes.length;
+            }
+        });
+
+        // 获取选中的图片
+        function getSelectedImages() {
+            const checkboxes = document.querySelectorAll(".image-checkbox:checked");
+            return Array.from(checkboxes).map(function(cb) {
+                return {
+                    index: parseInt(cb.dataset.index),
+                    url: currentImages[parseInt(cb.dataset.index)]
+                };
+            });
+        }
+
+        // 下载图片打包
+        async function downloadImages() {
+            const selectedImages = getSelectedImages();
+
+            if (selectedImages.length === 0) {
+                showStatus("请至少选择一张图片进行下载", "warning");
+                return;
+            }
+
+            if (isDownloading) {
+                showStatus("正在下载中，请稍候...", "warning");
+                return;
+            }
+
+            isDownloading = true;
+            const downloadBtn = document.getElementById("downloadBtn");
+            const progressContainer = document.getElementById("progressContainer");
+            const progressBar = document.getElementById("progressBar");
+            const progressText = document.getElementById("progressText");
+            const progressPercent = document.getElementById("progressPercent");
+
+            downloadBtn.disabled = true;
+            downloadBtn.innerHTML = '<div class="loading-spinner"></div><span>打包中...</span>';
+            progressContainer.classList.remove("hidden");
+
+            const zip = new JSZip();
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, "");
+            const folder = zip.folder("小红书高清主图_" + timestamp);
+
+            let successCount = 0;
+            let failCount = 0;
+
+            try {
+                for (let i = 0; i < selectedImages.length; i++) {
+                    const item = selectedImages[i];
+                    const percent = Math.round(((i + 1) / selectedImages.length) * 100);
+
+                    progressText.textContent = "正在下载第 " + (i + 1) + " / " + selectedImages.length + " 张图片...";
+                    progressBar.style.width = percent + "%";
+                    progressPercent.textContent = percent + "%";
+
+                    try {
+                        // 通过代理接口获取图片
+                        const response = await axios.get("/api/proxy?url=" + encodeURIComponent(item.url), {
+                            responseType: "arraybuffer",
+                            timeout: 60000
+                        });
+
+                        // 从 URL 提取文件扩展名
+                        const urlParts = item.url.split("/");
+                        let fileName = urlParts[urlParts.length - 1] || "image_" + (item.index + 1);
+                        if (!fileName.includes(".")) {
+                            fileName += ".jpg";
+                        }
+                        // 重命名为序号
+                        const extension = fileName.split(".").pop() || "jpg";
+                        fileName = "IMG_" + String(item.index + 1).padStart(3, "0") + "." + extension;
+
+                        folder.file(fileName, response.data);
+                        successCount++;
+                    } catch (err) {
+                        console.warn("图片 " + (item.index + 1) + " 下载失败:", err.message);
+                        failCount++;
+                    }
+                }
+
+                progressText.textContent = "正在生成 ZIP 文件...";
+                progressBar.style.width = "100%";
+                progressPercent.textContent = "100%";
+
+                // 生成 ZIP 文件
+                const zipBlob = await zip.generateAsync({
+                    type: "blob",
+                    compression: "DEFLATE",
+                    compressionOptions: { level: 6 }
+                }, function(metadata) {
+                    progressText.textContent = "正在压缩..." + Math.round(metadata.percent) + "%";
+                });
+
+                // 触发下载
+                const downloadTimestamp = new Date().toLocaleString("zh-CN", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit"
+                }).replace(/[/,:]/g, "-").replace(/\s/g, "_");
+                saveAs(zipBlob, "小红书高清主图_" + downloadTimestamp + ".zip");
+
+                showStatus(
+                    "下载完成！成功 " + successCount + " 张" + (failCount > 0 ? "，失败 " + failCount + " 张" : ""),
+                    failCount > 0 ? "warning" : "success"
+                );
+
+            } catch (err) {
+                console.error("打包下载失败:", err);
+                showStatus("打包下载失败：" + (err.message || "未知错误"), "error");
+            } finally {
+                isDownloading = false;
+                downloadBtn.disabled = false;
+                downloadBtn.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg><span>一键打包下载高清主图 (.zip)</span>';
+
+                setTimeout(() => {
+                    progressContainer.classList.add("hidden");
+                    progressBar.style.width = "0%";
+                }, 2000);
+            }
+        }
+
+        // 回车键快速解析
+        document.getElementById("urlInput").addEventListener("keydown", function(e) {
+            if (e.key === "Enter") {
+                parseNote();
+            }
+        });
+
+        // 启动时检测剪贴板内容
+        document.addEventListener("DOMContentLoaded", async function() {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text && (text.includes("xiaohongshu.com") || text.includes("xhslink.com"))) {
+                    document.getElementById("urlInput").value = text;
+                    showStatus("已自动识别剪贴板中的小红书链接", "info");
+                }
+            } catch (err) {
+                // 忽略剪贴板访问错误
+            }
+        });
+    </script>
+</body>
+</html>
