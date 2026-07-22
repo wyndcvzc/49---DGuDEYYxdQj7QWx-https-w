@@ -4,16 +4,22 @@
 功能: 笔记解析 + 图片代理
 """
 
+import os
 import re
 import json
 import time
+from typing import Optional
 from urllib.parse import urlparse, unquote
 
 import httpx
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, JSONResponse, StreamingResponse
+from fastapi.responses import Response, JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+INDEX_HTML = os.path.join(STATIC_DIR, "index.html")
 
 app = FastAPI(title="XHS Downloader API")
 
@@ -26,8 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 挂载静态文件目录（前端 index.html 放在 static 文件夹）
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # 全局 HTTP 客户端（模拟浏览器）
 HEADERS = {
@@ -64,7 +69,7 @@ def clean_image_url(url: str) -> str:
     return base_url
 
 
-def parse_initial_state(html: str) -> dict | None:
+def parse_initial_state(html: str) -> Optional[dict]:
     """
     从 HTML 中提取 window.__INITIAL_STATE__ 或 window.__DATA__ 的 JSON 数据。
     """
@@ -179,9 +184,7 @@ def extract_images_from_data(data: dict) -> tuple[str, list[str]]:
 
 @app.get("/")
 async def index():
-    """返回首页"""
-    from fastapi.responses import FileResponse
-    return FileResponse("static/index.html")
+    return FileResponse(INDEX_HTML)
 
 
 @app.post("/api/parse")

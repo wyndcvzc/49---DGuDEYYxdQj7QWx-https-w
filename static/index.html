@@ -6,8 +6,7 @@
     <title>小红书高清主图下载器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    
     <style>
         @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
 
@@ -228,16 +227,28 @@
 
                 <!-- 下载按钮 -->
                 <div class="flex flex-col items-center gap-4">
-                    <button
-                        id="downloadBtn"
-                        onclick="downloadImages()"
-                        class="btn-primary px-12 py-4 rounded-xl text-white font-semibold text-lg flex items-center gap-3"
-                    >
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                        </svg>
-                        <span>一键打包下载高清主图 (.zip)</span>
-                    </button>
+                    <div class="flex gap-3">
+                        <button
+                            id="downloadBtn"
+                            onclick="downloadImages()"
+                            class="btn-primary px-12 py-4 rounded-xl text-white font-semibold text-lg flex items-center gap-3"
+                        >
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                            </svg>
+                            <span>下载所有高清主图</span>
+                        </button>
+                        <button
+                            id="openBtn"
+                            onclick="openAllImages()"
+                            class="btn-secondary px-8 py-4 rounded-xl text-gray-300 font-semibold flex items-center gap-3 hover:text-white"
+                        >
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                            </svg>
+                            <span>逐张打开图片</span>
+                        </button>
+                    </div>
                     <!-- 进度条 -->
                     <div id="progressContainer" class="w-full max-w-md hidden">
                         <div class="flex justify-between text-sm text-gray-400 mb-2">
@@ -359,10 +370,13 @@
 
                 const imgSrc = "/api/proxy?url=" + encodeURIComponent(imgUrl);
 
-                card.innerHTML = '<div class="aspect-square relative">' +
+                card.innerHTML = '<div class="aspect-square relative group cursor-pointer" onclick="event.stopPropagation(); window.open(\'/api/proxy?url=' + encodeURIComponent(imgUrl) + '\', \'_blank\')">' +
                     '<img src="' + imgSrc + '" alt="图片 ' + (index + 1) + '" class="w-full h-full object-cover" loading="lazy">' +
-                    '<div class="absolute top-3 left-3"><input type="checkbox" class="checkbox-custom image-checkbox" data-index="' + index + '" checked></div>' +
-                    '<div class="absolute bottom-3 right-3 opacity-0 hover:opacity-100 transition-opacity"><span class="bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-white">' + safeName + '</span></div>' +
+                    '<div class="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">' +
+                        '<span class="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs text-white">🔍 点击查看大图</span>' +
+                    '</div>' +
+                    '<div class="absolute top-3 left-3" onclick="event.stopPropagation()"><input type="checkbox" class="checkbox-custom image-checkbox" data-index="' + index + '" checked></div>' +
+                    '<div class="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><span class="bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-white">' + safeName + '</span></div>' +
                     '</div>';
 
                 grid.appendChild(card);
@@ -386,6 +400,22 @@
             }
         });
 
+        // 打开所有已下载图片（在新标签页）
+        function openAllImages() {
+            const selectedImages = getSelectedImages();
+            if (selectedImages.length === 0) return;
+
+            // 逐张在新标签页中打开，间隔 300ms 避免浏览器拦截
+            selectedImages.forEach(function(item, i) {
+                setTimeout(function() {
+                    const proxyUrl = "/api/proxy?url=" + encodeURIComponent(item.url);
+                    window.open(proxyUrl, "_blank");
+                }, i * 300);
+            });
+
+            showStatus("已在新标签页打开 " + selectedImages.length + " 张图片", "success");
+        }
+
         // 获取选中的图片
         function getSelectedImages() {
             const checkboxes = document.querySelectorAll(".image-checkbox:checked");
@@ -397,7 +427,7 @@
             });
         }
 
-        // 下载图片打包
+        // 逐张下载图片到同一目录
         async function downloadImages() {
             const selectedImages = getSelectedImages();
 
@@ -419,15 +449,24 @@
             const progressPercent = document.getElementById("progressPercent");
 
             downloadBtn.disabled = true;
-            downloadBtn.innerHTML = '<div class="loading-spinner"></div><span>打包中...</span>';
+            downloadBtn.innerHTML = '<div class="loading-spinner"></div><span>下载中...</span>';
             progressContainer.classList.remove("hidden");
-
-            const zip = new JSZip();
-            const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, "");
-            const folder = zip.folder("小红书高清主图_" + timestamp);
 
             let successCount = 0;
             let failCount = 0;
+
+            // 辅助函数：触发单张图片下载
+            function triggerDownload(blob, fileName) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                // 延迟释放 URL 确保下载已触发
+                setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+            }
 
             try {
                 for (let i = 0; i < selectedImages.length; i++) {
@@ -439,66 +478,51 @@
                     progressPercent.textContent = percent + "%";
 
                     try {
-                        // 通过代理接口获取图片
                         const response = await axios.get("/api/proxy?url=" + encodeURIComponent(item.url), {
-                            responseType: "arraybuffer",
+                            responseType: "blob",
                             timeout: 60000
                         });
 
-                        // 从 URL 提取文件扩展名
-                        const urlParts = item.url.split("/");
+                        // 生成文件名
+                        const urlParts = item.url.split("?")[0].split("/");
                         let fileName = urlParts[urlParts.length - 1] || "image_" + (item.index + 1);
                         if (!fileName.includes(".")) {
                             fileName += ".jpg";
                         }
-                        // 重命名为序号
                         const extension = fileName.split(".").pop() || "jpg";
                         fileName = "IMG_" + String(item.index + 1).padStart(3, "0") + "." + extension;
 
-                        folder.file(fileName, response.data);
+                        triggerDownload(response.data, fileName);
                         successCount++;
+
+                        // 每张图片间隔 400ms，避免浏览器同时触发太多下载
+                        await new Promise(function(resolve) { setTimeout(resolve, 400); });
                     } catch (err) {
                         console.warn("图片 " + (item.index + 1) + " 下载失败:", err.message);
                         failCount++;
                     }
                 }
 
-                progressText.textContent = "正在生成 ZIP 文件...";
                 progressBar.style.width = "100%";
                 progressPercent.textContent = "100%";
 
-                // 生成 ZIP 文件
-                const zipBlob = await zip.generateAsync({
-                    type: "blob",
-                    compression: "DEFLATE",
-                    compressionOptions: { level: 6 }
-                }, function(metadata) {
-                    progressText.textContent = "正在压缩..." + Math.round(metadata.percent) + "%";
-                });
-
-                // 触发下载
-                const downloadTimestamp = new Date().toLocaleString("zh-CN", {
-                    year: "numeric",
-                    month: "2-digit",
-                    day: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit"
-                }).replace(/[/,:]/g, "-").replace(/\s/g, "_");
-                saveAs(zipBlob, "小红书高清主图_" + downloadTimestamp + ".zip");
-
                 showStatus(
-                    "下载完成！成功 " + successCount + " 张" + (failCount > 0 ? "，失败 " + failCount + " 张" : ""),
+                    "下载完成！成功 " + successCount + " 张" + (failCount > 0 ? "，失败 " + failCount + " 张" : "") + "，正在打开图片...",
                     failCount > 0 ? "warning" : "success"
                 );
 
+                // 下载完成后自动在新标签页打开所有图片
+                setTimeout(function() {
+                    openAllImages();
+                }, 500);
+
             } catch (err) {
-                console.error("打包下载失败:", err);
-                showStatus("打包下载失败：" + (err.message || "未知错误"), "error");
+                console.error("下载失败:", err);
+                showStatus("下载失败：" + (err.message || "未知错误"), "error");
             } finally {
                 isDownloading = false;
                 downloadBtn.disabled = false;
-                downloadBtn.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg><span>一键打包下载高清主图 (.zip)</span>';
+                downloadBtn.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg><span>下载所有高清主图</span>';
 
                 setTimeout(() => {
                     progressContainer.classList.add("hidden");
