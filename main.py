@@ -1,13 +1,14 @@
 """
 小红书高清主图/视频下载器 - 后端服务
 技术栈: FastAPI + httpx
-功能: 笔记解析 + 图片代理
+功能: 笔记解析 + 图片代理 + Freemium 激活
 """
 
 import os
 import re
 import json
-import time
+import hashlib
+from datetime import date
 from typing import Optional
 from urllib.parse import urlparse, unquote
 
@@ -15,7 +16,7 @@ import io
 import zipfile
 
 import httpx
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Query, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -25,6 +26,99 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 INDEX_HTML = os.path.join(STATIC_DIR, "index.html")
 
 app = FastAPI(title="XHS Downloader API")
+
+# ==================== Freemium 配置 ====================
+ACTIVATION_PREFIX = "XHSDL-"        # 必须与算号器 prefix 一致
+FREE_DAILY_PARSE_LIMIT = 5          # 免费版：每天解析次数
+FREE_DAILY_ZIP_LIMIT = 3            # 免费版：每天 ZIP 下载次数
+
+# 内存存储（生产环境可替换为 Redis）
+# key: machine_id -> {"parse_count": int, "zip_count": int, "date": "YYYY-MM-DD", "activated": bool}
+_quota_store: dict = {}
+
+
+def _get_today() -> str:
+    return date.today().isoformat()
+
+
+def _ensure_quota(machine_id: str):
+    """确保某机器码的今日配额记录存在"""
+    today = _get_today()
+    rec = _quota_store.get(machine_id)
+    if not rec or rec.get("date") != today:
+        # 新的一天，重置计数，但保留激活状态
+        old_activated = bool(rec and rec.get("activated"))
+        _quota_store[machine_id] = {
+            "date": today,
+            "parse_count": 0,
+            "zip_count": 0,
+            "activated": old_activated,
+        }
+    return _quota_store[machine_id]
+
+
+def _is_activated(activation: Optional[str], machine_id: str) -> bool:
+    """校验激活码是否合法（与算号器算法完全对应）"""
+    if not activation or not machine_id:
+        # 顺带检查 store 里的激活状态（冗余双保险）
+        rec = _quota_store.get(machine_id)
+        return bool(rec and rec.get("activated"))
+
+    activation = activation.strip()
+    machine_id = machine_id.strip()
+
+    # 算法：prefix + MD5(machine_id).upper()[:16]
+    expected = ACTIVATION_PREFIX + hashlib.md5(machine_id.encode()).hexdigest().upper()[:16]
+
+    if activation == expected:
+        # 激活成功，写入 store 记录
+        rec = _ensure_quota(machine_id)
+        rec["activated"] = True
+        return True
+    return False
+
+
+def _consume_parse_quota(machine_id: str) -> tuple[bool, str, int, int]:
+    """尝试消耗一次解析配额。返回 (ok, msg, remain_parse, remain_zip)"""
+    rec = _ensure_quota(machine_id)
+    if rec.get("activated"):
+        return True, "", 99999, 99999
+
+    if rec["parse_count"] >= FREE_DAILY_PARSE_LIMIT:
+        return False, f"免费版今日解析已达上限（{FREE_DAILY_PARSE_LIMIT} 次），请输入激活码解锁无限使用。", 0, max(0, FREE_DAILY_ZIP_LIMIT - rec["zip_count"])
+
+    rec["parse_count"] += 1
+    remain_parse = FREE_DAILY_PARSE_LIMIT - rec["parse_count"]
+    remain_zip = FREE_DAILY_ZIP_LIMIT - rec["zip_count"]
+    return True, "", remain_parse, remain_zip
+
+
+def _consume_zip_quota(machine_id: str) -> tuple[bool, str, int, int]:
+    """尝试消耗一次 ZIP 下载配额"""
+    rec = _ensure_quota(machine_id)
+    if rec.get("activated"):
+        return True, "", 99999, 99999
+
+    if rec["zip_count"] >= FREE_DAILY_ZIP_LIMIT:
+        return False, f"免费版今日打包下载已达上限（{FREE_DAILY_ZIP_LIMIT} 次），请输入激活码解锁无限使用。", max(0, FREE_DAILY_PARSE_LIMIT - rec["parse_count"]), 0
+
+    rec["zip_count"] += 1
+    remain_parse = FREE_DAILY_PARSE_LIMIT - rec["parse_count"]
+    remain_zip = FREE_DAILY_ZIP_LIMIT - rec["zip_count"]
+    return True, "", remain_parse, remain_zip
+
+
+def _get_remain_quota(machine_id: str) -> dict:
+    """获取当前剩余配额"""
+    rec = _ensure_quota(machine_id)
+    if rec.get("activated"):
+        return {"activated": True, "remain_parse": 99999, "remain_zip": 99999, "today": _get_today()}
+    return {
+        "activated": False,
+        "remain_parse": max(0, FREE_DAILY_PARSE_LIMIT - rec["parse_count"]),
+        "remain_zip": max(0, FREE_DAILY_ZIP_LIMIT - rec["zip_count"]),
+        "today": _get_today(),
+    }
 
 # CORS 中间件配置
 app.add_middleware(
@@ -198,7 +292,88 @@ def extract_images_from_data(data: dict) -> tuple[str, list[str]]:
     return title, images
 
 
-# ==================== API 路由 ====================
+# ==================== Freemium API 路由 ====================
+
+
+@app.post("/api/auth/machine-id")
+async def generate_machine_id(request: Request):
+    """
+    根据客户端指纹生成稳定机器码。
+    请求体: { "fingerprint": "浏览器指纹字符串" }
+    返回:   { "machine_id": "XHS-XXXXXXXXXXXXXXXX" }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    fingerprint = (body.get("fingerprint") or "").strip()
+    # 附加真实 IP 作为种子（考虑 X-Forwarded-For，兼容 Vercel/CDN）
+    forwarded = request.headers.get("x-forwarded-for", "")
+    real_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host or "")
+    ua = request.headers.get("user-agent", "")
+
+    seed = f"{fingerprint}|{real_ip}|{ua}"
+    raw_hash = hashlib.sha256(seed.encode()).hexdigest().upper()
+    machine_id = "XHS-" + raw_hash[:16]
+
+    # 预热配额记录
+    _ensure_quota(machine_id)
+
+    quota = _get_remain_quota(machine_id)
+    return JSONResponse(content={"success": True, "machine_id": machine_id, **quota})
+
+
+@app.post("/api/auth/status")
+async def get_status(request: Request):
+    """
+    查询当前机器的激活状态和剩余配额。
+    请求体: { "machine_id": "...", "activation": "激活码（可选）" }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    machine_id = (body.get("machine_id") or "").strip()
+    if not machine_id:
+        return JSONResponse(status_code=400, content={"success": False, "message": "缺少 machine_id"})
+
+    activation = (body.get("activation") or "").strip()
+    if activation:
+        # 带上激活码时顺便校验一次
+        _is_activated(activation, machine_id)
+
+    return JSONResponse(content={"success": True, "machine_id": machine_id, **_get_remain_quota(machine_id)})
+
+
+@app.post("/api/auth/activate")
+async def activate_license(request: Request):
+    """
+    提交激活码校验。
+    请求体: { "machine_id": "...", "activation": "XHSDL-XXXXXXXXXXXXXXXX" }
+    返回:   { "success": True/False, "message": "...", "remain_parse": N, "remain_zip": N }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"success": False, "message": "请求体格式错误"})
+
+    machine_id = (body.get("machine_id") or "").strip()
+    activation = (body.get("activation") or "").strip()
+
+    if not machine_id or not activation:
+        return JSONResponse(status_code=400, content={"success": False, "message": "请传入机器码和激活码"})
+
+    ok = _is_activated(activation, machine_id)
+    if ok:
+        quota = _get_remain_quota(machine_id)
+        return JSONResponse(content={"success": True, "message": "激活成功！已解锁永久无限使用权限。", **quota})
+    else:
+        return JSONResponse(status_code=400, content={"success": False, "message": "激活码无效，请检查机器码是否匹配或联系作者。", **_get_remain_quota(machine_id)})
+
+
+# ==================== 业务 API 路由 ====================
 
 
 @app.get("/")
@@ -207,25 +382,55 @@ async def index():
 
 
 @app.post("/api/parse")
-async def parse_note(request: Request):
+async def parse_note(
+    request: Request,
+    x_machine_id: Optional[str] = Header(None),
+    x_activation: Optional[str] = Header(None),
+):
     """
     接口一：解析小红书笔记链接，提取高清主图列表
     请求体: { "url": "https://www.xiaohongshu.com/..." }
-    返回:   { "success": true, "title": "...", "images": ["...", ...] }
+    Headers: X-Machine-Id, X-Activation（用于配额校验）
+    返回:   { "success": true, "title": "...", "images": ["...", ...], "quota": {...} }
     """
+    # 1. 先做配额校验
+    machine_id = (x_machine_id or "").strip()
+    activation = (x_activation or "").strip()
+    if not machine_id:
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "message": "未检测到机器码，请刷新页面重试。"},
+        )
+
+    # 若请求带有激活码，先做一次校验（服务端写入激活记录）
+    if activation:
+        _is_activated(activation, machine_id)
+
+    ok, msg, rp, rz = _consume_parse_quota(machine_id)
+    quota = {
+        "activated": _get_remain_quota(machine_id)["activated"],
+        "remain_parse": rp,
+        "remain_zip": rz,
+    }
+    if not ok:
+        return JSONResponse(
+            status_code=429,
+            content={"success": False, "message": msg, "quota": quota, "need_activate": True},
+        )
+
     try:
         body = await request.json()
     except Exception:
         return JSONResponse(
             status_code=400,
-            content={"success": False, "message": "请求体格式错误，需要 JSON"},
+            content={"success": False, "message": "请求体格式错误，需要 JSON", "quota": quota},
         )
 
     raw_url = body.get("url", "").strip()
     if not raw_url:
         return JSONResponse(
             status_code=400,
-            content={"success": False, "message": "请输入小红书笔记链接"},
+            content={"success": False, "message": "请输入小红书笔记链接", "quota": quota},
         )
 
     # 从文本中提取链接
@@ -233,7 +438,7 @@ async def parse_note(request: Request):
     if not urls:
         return JSONResponse(
             status_code=400,
-            content={"success": False, "message": "未能从输入中提取到有效链接"},
+            content={"success": False, "message": "未能从输入中提取到有效链接", "quota": quota},
         )
 
     target_url = urls[0]
@@ -249,7 +454,7 @@ async def parse_note(request: Request):
         except httpx.HTTPError as e:
             return JSONResponse(
                 status_code=502,
-                content={"success": False, "message": f"请求小红书页面失败: {str(e)}"},
+                content={"success": False, "message": f"请求小红书页面失败: {str(e)}", "quota": quota},
             )
 
         html = resp.text
@@ -262,6 +467,7 @@ async def parse_note(request: Request):
             content={
                 "success": False,
                 "message": "无法从页面中解析出笔记数据，可能链接无效或页面结构已变更",
+                "quota": quota,
             },
         )
 
@@ -273,6 +479,7 @@ async def parse_note(request: Request):
             content={
                 "success": False,
                 "message": "未找到任何图片，该笔记可能为纯视频或数据格式已变更",
+                "quota": quota,
             },
         )
 
@@ -281,6 +488,7 @@ async def parse_note(request: Request):
             "success": True,
             "title": title or "未命名笔记",
             "images": images,
+            "quota": quota,
         }
     )
 
@@ -348,12 +556,38 @@ async def proxy_image(url: str = Query(..., description="小红书图片地址")
 @app.get("/api/export")
 async def download_zip(
     data: str = Query(..., description="Base64编码的JSON数据"),
+    x_machine_id: Optional[str] = Header(None),
+    x_activation: Optional[str] = Header(None),
 ):
     """
     接口三：打包下载（GET版本，避开POST拦截）
     接收 base64 编码的 JSON: { "title": "笔记标题", "images": ["url1", "url2", ...] }
+    Headers: X-Machine-Id, X-Activation（用于配额校验）
     返回:   ZIP 文件
     """
+    # 1. 配额校验
+    machine_id = (x_machine_id or "").strip()
+    activation = (x_activation or "").strip()
+    if not machine_id:
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "message": "未检测到机器码，请刷新页面重试。"},
+        )
+    if activation:
+        _is_activated(activation, machine_id)
+
+    ok, msg, rp, rz = _consume_zip_quota(machine_id)
+    if not ok:
+        quota = {
+            "activated": _get_remain_quota(machine_id)["activated"],
+            "remain_parse": rp,
+            "remain_zip": rz,
+        }
+        return JSONResponse(
+            status_code=429,
+            content={"success": False, "message": msg, "quota": quota, "need_activate": True},
+        )
+
     import base64
     try:
         json_str = base64.b64decode(data).decode("utf-8")

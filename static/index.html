@@ -155,6 +155,99 @@
     </style>
 </head>
 <body class="text-white">
+    <!-- 顶部状态栏 -->
+    <div id="authBadge" class="fixed top-4 right-4 z-40 flex items-center gap-3 glass-card rounded-full px-4 py-2 fade-in hidden">
+        <div id="authIcon" class="flex items-center justify-center w-7 h-7 rounded-full bg-white/5">
+            <span id="authIconEmoji">👤</span>
+        </div>
+        <div class="flex flex-col leading-tight">
+            <div class="flex items-center gap-2">
+                <span id="authPlan" class="text-xs font-semibold text-gray-300">免费版</span>
+            </div>
+            <div id="authQuota" class="text-[11px] text-gray-500">加载中...</div>
+        </div>
+        <button
+            id="authBtn"
+            onclick="openActivateModal()"
+            class="ml-1 text-xs font-semibold px-3 py-1 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-black hover:scale-105 transition-transform"
+        >
+            激活
+        </button>
+    </div>
+
+    <!-- 激活弹窗 -->
+    <div id="activateModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div class="glass-card rounded-2xl p-6 w-full max-w-md fade-in">
+            <div class="flex items-start justify-between mb-5">
+                <div>
+                    <h3 class="text-xl font-bold text-white mb-1">👑 升级为永久 PRO</h3>
+                    <p class="text-sm text-gray-400">解锁无限解析与打包下载，永久使用</p>
+                </div>
+                <button onclick="closeActivateModal()" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+
+            <!-- 对比表 -->
+            <div class="mb-5 rounded-xl bg-white/5 border border-white/5 text-sm overflow-hidden">
+                <div class="grid grid-cols-3 bg-white/5 text-xs font-semibold text-gray-300">
+                    <div class="p-3">功能</div>
+                    <div class="p-3 text-center">免费版</div>
+                    <div class="p-3 text-center text-yellow-400">PRO 版</div>
+                </div>
+                <div class="grid grid-cols-3 border-t border-white/5"><div class="p-3 text-gray-400">每日解析</div><div class="p-3 text-center">5 次</div><div class="p-3 text-center text-green-400">∞ 无限</div></div>
+                <div class="grid grid-cols-3 border-t border-white/5"><div class="p-3 text-gray-400">每日打包下载</div><div class="p-3 text-center">3 次</div><div class="p-3 text-center text-green-400">∞ 无限</div></div>
+                <div class="grid grid-cols-3 border-t border-white/5"><div class="p-3 text-gray-400">高清无水印</div><div class="p-3 text-center">✅</div><div class="p-3 text-center">✅</div></div>
+                <div class="grid grid-cols-3 border-t border-white/5"><div class="p-3 text-gray-400">永久使用</div><div class="p-3 text-center">-</div><div class="p-3 text-center text-green-400">✅</div></div>
+            </div>
+
+            <!-- 机器码 -->
+            <div class="mb-4">
+                <label class="block text-xs font-medium text-gray-400 mb-2">您的机器码（发给作者算激活码）</label>
+                <div class="flex gap-2">
+                    <input
+                        type="text"
+                        id="machineIdInput"
+                        readonly
+                        class="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2.5 text-sm font-mono text-white outline-none cursor-pointer select-all"
+                        onclick="this.select()"
+                        title="点击全选后 Ctrl+C 复制"
+                    >
+                    <button
+                        onclick="copyMachineId()"
+                        class="btn-secondary px-4 py-2.5 rounded-lg text-xs font-medium"
+                    >复制</button>
+                </div>
+            </div>
+
+            <!-- 激活码 -->
+            <div class="mb-5">
+                <label class="block text-xs font-medium text-gray-400 mb-2">激活码</label>
+                <input
+                    type="text"
+                    id="activationInput"
+                    placeholder="粘贴激活码，如 XHSDL-XXXXXXXXXXXXXXXX"
+                    class="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 outline-none input-glow"
+                >
+            </div>
+
+            <!-- 按钮 -->
+            <div class="flex gap-3">
+                <button
+                    onclick="closeActivateModal()"
+                    class="flex-1 btn-secondary py-2.5 rounded-lg text-sm text-gray-300"
+                >稍后再说</button>
+                <button
+                    id="activateSubmitBtn"
+                    onclick="submitActivate()"
+                    class="flex-1 btn-primary py-2.5 rounded-lg text-sm text-white font-semibold"
+                >立即激活</button>
+            </div>
+
+            <div class="mt-4 text-center text-xs text-gray-500">
+                获取激活码请联系作者 · 一人一码绑定本机 · 永久有效
+            </div>
+        </div>
+    </div>
+
     <div class="min-h-screen flex flex-col items-center justify-center px-4 py-12">
         <!-- 标题区域 -->
         <div class="text-center mb-12 fade-in">
@@ -254,54 +347,208 @@
             </div>
         </div>
 
-        <!-- 变现组件：广告位 + 赞赏 + 微信群 -->
-        <div class="mt-12 max-w-2xl mx-auto space-y-6">
-
-            <!-- 广告位（Adsterra Native Banner） -->
-            <div class="glass-card rounded-2xl p-5 text-center">
-                <p class="text-[10px] uppercase tracking-wider text-gray-600 mb-3">Advertisement</p>
-                <div class="min-h-[90px] flex items-center justify-center rounded-xl">
-                    <script async="async" data-cfasync="false" src="https://pl30758629.effectivecpmnetwork.com/32b43fd80e70d1642d07890d7a334d0c/invoke.js"></script>
-                    <div id="container-32b43fd80e70d1642d07890d7a334d0c"></div>
-                </div>
-            </div>
-
-            <!-- 赞赏 + 微信群 -->
-            <div class="grid grid-cols-2 gap-4">
-                <button id="rewardBtn" class="glass-card rounded-2xl p-5 hover:bg-white/5 transition text-left">
-                    <div class="text-3xl mb-2">☕</div>
-                    <div class="text-white font-medium">请作者喝杯咖啡</div>
-                    <div class="text-xs text-gray-500 mt-1">支持项目持续维护</div>
-                </button>
-                <button id="groupBtn" class="glass-card rounded-2xl p-5 hover:bg-white/5 transition text-left">
-                    <div class="text-3xl mb-2">💬</div>
-                    <div class="text-white font-medium">加入用户群</div>
-                    <div class="text-xs text-gray-500 mt-1">获取更新 / 提需求</div>
-                </button>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- 二维码弹窗 -->
-    <div id="qrModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
-        <div class="glass-card rounded-3xl p-8 max-w-sm w-full text-center relative">
-            <button id="closeModal" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl leading-none">×</button>
-            <h3 id="modalTitle" class="text-xl font-semibold text-white mb-4"></h3>
-            <div class="bg-white rounded-2xl p-4 mb-4">
-                <img id="modalQr" src="" alt="二维码" class="w-full h-auto" />
-            </div>
-            <p id="modalDesc" class="text-sm text-gray-400"></p>
-            <div id="modalWechat" class="hidden mt-3 text-sm text-gray-300 items-center justify-center">
-                <span>微信号：</span>
-                <code class="bg-white/10 px-2 py-1 rounded text-red-300" id="wechatId"></code>
-                <button id="copyWechat" class="ml-2 text-red-400 hover:text-red-300 underline">复制</button>
-            </div>
-        </div>
     </div>
 
     <script>
-        // 全局状态
+        // ========== Freemium 鉴权状态 ==========
+        const AUTH_STORAGE_KEY = "xhs_auth_v1";
+        let authState = {
+            machineId: "",
+            activation: "",
+            activated: false,
+            remainParse: 5,
+            remainZip: 3,
+        };
+
+        // 生成简单的浏览器指纹（纯前端，不依赖外部库）
+        function buildFingerprint() {
+            const parts = [
+                screen.width + "x" + screen.height,
+                screen.colorDepth,
+                navigator.language || "",
+                (navigator.languages || []).join(","),
+                navigator.platform || "",
+                navigator.userAgent || "",
+                new Date().getTimezoneOffset(),
+            ];
+            try {
+                // 加 canvas 指纹
+                const canvas = document.createElement("canvas");
+                canvas.width = 200;
+                canvas.height = 50;
+                const ctx = canvas.getContext("2d");
+                ctx.textBaseline = "top";
+                ctx.font = "14px Arial";
+                ctx.fillStyle = "#f60";
+                ctx.fillRect(0, 0, 80, 20);
+                ctx.fillStyle = "#069";
+                ctx.fillText("xhs-fp- fingerprint <canvas> 📌", 2, 2);
+                parts.push(canvas.toDataURL().slice(-64));
+            } catch (e) {}
+            return parts.join("|");
+        }
+
+        // 保存到 localStorage
+        function saveAuthState() {
+            try {
+                localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+                    machineId: authState.machineId,
+                    activation: authState.activation,
+                }));
+            } catch (e) {}
+        }
+
+        function loadAuthState() {
+            try {
+                const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+                if (!raw) return;
+                const obj = JSON.parse(raw);
+                authState.machineId = obj.machineId || "";
+                authState.activation = obj.activation || "";
+            } catch (e) {}
+        }
+
+        // 渲染右上角徽章
+        function renderAuthBadge() {
+            const badge = document.getElementById("authBadge");
+            const planEl = document.getElementById("authPlan");
+            const quotaEl = document.getElementById("authQuota");
+            const iconEmoji = document.getElementById("authIconEmoji");
+            const btn = document.getElementById("authBtn");
+            const iconBox = document.getElementById("authIcon");
+
+            badge.classList.remove("hidden");
+
+            if (authState.activated) {
+                planEl.textContent = "PRO 会员";
+                planEl.className = "text-xs font-bold bg-gradient-to-r from-yellow-300 to-orange-400 bg-clip-text text-transparent";
+                quotaEl.textContent = "永久 · 无限使用";
+                iconEmoji.textContent = "👑";
+                iconBox.className = "flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-yellow-500/30 to-orange-500/30";
+                btn.textContent = "已激活";
+                btn.className = "ml-1 text-xs font-semibold px-3 py-1 rounded-full bg-white/10 text-green-400 cursor-default pointer-events-none";
+            } else {
+                planEl.textContent = "免费版";
+                planEl.className = "text-xs font-semibold text-gray-300";
+                quotaEl.textContent = "今日剩余：解析" + authState.remainParse + " 次 · 打包 " + authState.remainZip + " 次";
+                iconEmoji.textContent = "👤";
+                iconBox.className = "flex items-center justify-center w-7 h-7 rounded-full bg-white/5";
+                btn.textContent = "激活";
+                btn.className = "ml-1 text-xs font-semibold px-3 py-1 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-black hover:scale-105 transition-transform";
+            }
+        }
+
+        // 从响应中同步配额
+        function syncQuotaFromResp(data) {
+            if (!data || !data.quota) return;
+            if (typeof data.quota.activated === "boolean") authState.activated = data.quota.activated;
+            if (typeof data.quota.remain_parse === "number") authState.remainParse = data.quota.remain_parse;
+            if (typeof data.quota.remain_zip === "number") authState.remainZip = data.quota.remain_zip;
+            renderAuthBadge();
+        }
+
+        // 构造 axios 默认 header（给后端配额校验用）
+        function getAuthHeaders() {
+            const h = {};
+            if (authState.machineId) h["X-Machine-Id"] = authState.machineId;
+            if (authState.activation) h["X-Activation"] = authState.activation;
+            return h;
+        }
+
+        // 初始化机器码
+        async function initAuth() {
+            loadAuthState();
+
+            if (!authState.machineId) {
+                try {
+                    const fp = buildFingerprint();
+                    const resp = await axios.post("/api/auth/machine-id", { fingerprint: fp });
+                    if (resp.data && resp.data.success) {
+                        authState.machineId = resp.data.machine_id;
+                        authState.activated = !!resp.data.activated;
+                        authState.remainParse = typeof resp.data.remain_parse === "number" ? resp.data.remain_parse : 5;
+                        authState.remainZip = typeof resp.data.remain_zip === "number" ? resp.data.remain_zip : 3;
+                        saveAuthState();
+                    }
+                } catch (e) {
+                    console.warn("initAuth failed:", e);
+                }
+            } else {
+                // 已有 machineId，查一下今日状态
+                try {
+                    const payload = { machine_id: authState.machineId };
+                    if (authState.activation) payload.activation = authState.activation;
+                    const resp = await axios.post("/api/auth/status", payload);
+                    if (resp.data && resp.data.success) {
+                        authState.activated = !!resp.data.activated;
+                        authState.remainParse = typeof resp.data.remain_parse === "number" ? resp.data.remain_parse : authState.remainParse;
+                        authState.remainZip = typeof resp.data.remain_zip === "number" ? resp.data.remain_zip : authState.remainZip;
+                        saveAuthState();
+                    }
+                } catch (e) {}
+            }
+            renderAuthBadge();
+        }
+
+        // ====== 弹窗控制 ======
+        function openActivateModal() {
+            const modal = document.getElementById("activateModal");
+            modal.classList.remove("hidden");
+            modal.classList.add("flex");
+            document.getElementById("machineIdInput").value = authState.machineId || "生成中...";
+            setTimeout(() => document.getElementById("activationInput").focus(), 100);
+        }
+
+        function closeActivateModal() {
+            const modal = document.getElementById("activateModal");
+            modal.classList.add("hidden");
+            modal.classList.remove("flex");
+            document.getElementById("activationInput").value = "";
+        }
+
+        function copyMachineId() {
+            const input = document.getElementById("machineIdInput");
+            input.select();
+            try {
+                document.execCommand("copy");
+                showStatus("机器码已复制，发给作者即可获取激活码", "success");
+            } catch (e) {
+                showStatus("请手动 Ctrl+C 复制输入框内的机器码", "warning");
+            }
+        }
+
+        async function submitActivate() {
+            const code = document.getElementById("activationInput").value.trim();
+            const btn = document.getElementById("activateSubmitBtn");
+            if (!code) {
+                showStatus("请输入激活码", "warning");
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = "校验中...";
+            try {
+                const resp = await axios.post("/api/auth/activate", {
+                    machine_id: authState.machineId,
+                    activation: code,
+                });
+                authState.activation = code;
+                authState.activated = !!resp.data.activated;
+                authState.remainParse = typeof resp.data.remain_parse === "number" ? resp.data.remain_parse : 99999;
+                authState.remainZip = typeof resp.data.remain_zip === "number" ? resp.data.remain_zip : 99999;
+                saveAuthState();
+                renderAuthBadge();
+                showStatus(resp.data.message || "激活成功！", "success");
+                setTimeout(closeActivateModal, 800);
+            } catch (err) {
+                const msg = (err.response && err.response.data && err.response.data.message) || "激活失败，请检查激活码";
+                showStatus(msg, "error");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "立即激活";
+            }
+        }
+
+        // ========== 业务逻辑 ==========
         let currentImages = [];
         let isDownloading = false;
 
@@ -349,13 +596,24 @@
                 return;
             }
 
+            if (!authState.machineId) {
+                showStatus("系统初始化中，请稍候再试...", "warning");
+                return;
+            }
+
             // 更新按钮状态
             parseBtn.disabled = true;
             parseBtn.innerHTML = '<div class="loading-spinner"></div><span>解析中...</span>';
             showStatus("正在解析笔记，请稍候...", "info");
 
             try {
-                const response = await axios.post("/api/parse", { url: url });
+                const response = await axios.post(
+                    "/api/parse",
+                    { url: url },
+                    { headers: getAuthHeaders() }
+                );
+
+                syncQuotaFromResp(response.data);
 
                 if (response.data.success) {
                     currentImages = response.data.images || [];
@@ -375,8 +633,16 @@
                     showStatus(response.data.message || "解析失败，未找到图片", "error");
                 }
             } catch (err) {
-                const message = err.response?.data?.message || "网络请求失败，请检查链接是否有效";
-                showStatus(message, "error");
+                const respData = err.response && err.response.data;
+                const message = (respData && respData.message) || "网络请求失败，请检查链接是否有效";
+                syncQuotaFromResp(respData);
+                // 配额超限：直接打开激活弹窗
+                if (respData && respData.need_activate) {
+                    showStatus(message, "warning");
+                    setTimeout(openActivateModal, 400);
+                } else {
+                    showStatus(message, "error");
+                }
             } finally {
                 parseBtn.disabled = false;
                 parseBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg><span>解析</span>';
@@ -451,9 +717,35 @@
                 return;
             }
 
+            if (!authState.machineId) {
+                showStatus("系统初始化中，请稍候再试...", "warning");
+                return;
+            }
+
             if (isDownloading) {
                 showStatus("正在下载中，请稍候...", "warning");
                 return;
+            }
+
+            // 先请求一次后端 /api/export 预检配额（GET，不传 data 的预检用构造的空 payload）
+            try {
+                const prePayload = btoa(unescape(encodeURIComponent(JSON.stringify({ title: "_", images: [] }))));
+                const preResp = await axios.get("/api/export", {
+                    params: { data: prePayload },
+                    headers: getAuthHeaders(),
+                    validateStatus: function (s) { return s >= 200 && s < 600; },
+                });
+                // 400 才是正常（因为 images 为空），代表配额检查通过
+                // 429 表示配额超限
+                if (preResp.status === 429) {
+                    syncQuotaFromResp(preResp.data);
+                    showStatus((preResp.data && preResp.data.message) || "今日打包下载次数已用完", "warning");
+                    setTimeout(openActivateModal, 400);
+                    return;
+                }
+                syncQuotaFromResp(preResp.data);
+            } catch (e) {
+                // 网络错误不拦截，让后续实际流程决定
             }
 
             isDownloading = true;
@@ -521,10 +813,10 @@
 
                 const asciiTitle = title.replace(/[^\x20-\x7E]/g, "") || "xiaohongshu_images";
                 const blobUrl = URL.createObjectURL(blob);
-                
-                // 直接在新标签页打开，不触发下载提示
+
+                // 直接在新标签页打开
                 window.open(blobUrl, "_blank");
-                
+
                 setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 10000);
 
                 showStatus(
@@ -568,8 +860,11 @@
             }
         });
 
-        // 启动时检测剪贴板内容
+        // 启动时：初始化鉴权 + 检测剪贴板
         document.addEventListener("DOMContentLoaded", async function() {
+            // 先启动鉴权
+            initAuth();
+            // 顺便检测剪贴板
             try {
                 const text = await navigator.clipboard.readText();
                 if (text && (text.includes("xiaohongshu.com") || text.includes("xhslink.com"))) {
@@ -578,76 +873,6 @@
                 }
             } catch (err) {
                 // 忽略剪贴板访问错误
-            }
-        });
-
-        // ===== 变现组件交互 =====
-        // 配置：替换 qr 为你的实际二维码图片路径，wechat 为群主微信号
-        const MONETIZE_CONFIG = {
-            reward: {
-                title: '请作者喝杯咖啡 ❤️',
-                qr: '/static/qr-reward.jpg',
-                desc: '扫一扫，请作者喝杯咖啡，支持本项目持续维护',
-                wechat: null,
-            },
-            group: {
-                title: '加入用户群 💬',
-                qr: '/static/qr-group.jpg',
-                desc: '扫码进群，获取功能更新 / 提需求 / 反馈问题',
-                wechat: 'wxid_48h12qfswqlm22',
-            },
-        };
-
-        const qrModal = document.getElementById('qrModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalQr = document.getElementById('modalQr');
-        const modalDesc = document.getElementById('modalDesc');
-        const modalWechat = document.getElementById('modalWechat');
-        const wechatIdEl = document.getElementById('wechatId');
-
-        function openMonetizeModal(type) {
-            const cfg = MONETIZE_CONFIG[type];
-            modalTitle.textContent = cfg.title;
-            modalQr.src = cfg.qr;
-            modalQr.onerror = function() {
-                this.style.display = 'none';
-                modalDesc.innerHTML = '<span class="text-yellow-400">⚠️ 二维码图片未配置</span><br>请在 <code>static/index.html</code> 的 <code>MONETIZE_CONFIG</code> 中替换 <code>qr</code> 字段';
-            };
-            modalQr.style.display = '';
-            modalDesc.textContent = cfg.desc;
-            if (cfg.wechat) {
-                modalWechat.classList.remove('hidden');
-                modalWechat.classList.add('flex');
-                wechatIdEl.textContent = cfg.wechat;
-            } else {
-                modalWechat.classList.add('hidden');
-                modalWechat.classList.remove('flex');
-            }
-            qrModal.classList.remove('hidden');
-            qrModal.classList.add('flex');
-        }
-
-        function closeMonetizeModal() {
-            qrModal.classList.add('hidden');
-            qrModal.classList.remove('flex');
-        }
-
-        document.getElementById('rewardBtn').addEventListener('click', () => openMonetizeModal('reward'));
-        document.getElementById('groupBtn').addEventListener('click', () => openMonetizeModal('group'));
-        document.getElementById('closeModal').addEventListener('click', closeMonetizeModal);
-        qrModal.addEventListener('click', (e) => {
-            if (e.target === qrModal) closeMonetizeModal();
-        });
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !qrModal.classList.contains('hidden')) closeMonetizeModal();
-        });
-
-        document.getElementById('copyWechat').addEventListener('click', async () => {
-            try {
-                await navigator.clipboard.writeText(wechatIdEl.textContent);
-                showStatus('微信号已复制，去微信添加好友吧', 'success');
-            } catch (err) {
-                showStatus('复制失败，请手动选择复制', 'error');
             }
         });
     </script>
