@@ -11,6 +11,9 @@ import time
 from typing import Optional
 from urllib.parse import urlparse, unquote
 
+import io
+import zipfile
+
 import httpx
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,8 +44,24 @@ HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/126.0.0.0 Safari/537.36"
     ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Sec-Ch-Ua": '"Chromium";v="126", "Google Chrome";v="126", "Not.A/Brand";v="24"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "image",
+    "Sec-Fetch-Mode": "no-cors",
+    "Sec-Fetch-Site": "cross-site",
+    "Referer": "https://www.xiaohongshu.com/",
+    "Origin": "https://www.xiaohongshu.com",
+}
+
+# 代理图片专用请求头
+PROXY_HEADERS = {
+    **HEADERS,
     "Referer": "https://www.xiaohongshu.com/",
 }
 
@@ -275,27 +294,40 @@ async def proxy_image(url: str = Query(..., description="小红书图片地址")
     if not url:
         return JSONResponse(status_code=400, content={"message": "缺少 url 参数"})
 
-    # 安全校验：仅允许代理图片域名的请求
+    # 从 URL 推断 referer
     parsed = urlparse(url)
-    allowed_hosts = [
-        "sns-webpic",
-        "ci.xiaohongshu.com",
-        "xhscdn.com",
-        "xiaohongshu.com",
-        "sns-img",
-    ]
-    if not any(host in (parsed.hostname or "") for host in allowed_hosts):
-        # 放宽限制：只要是 http(s) 图片都尝试代理
-        pass
+    referer = "https://www.xiaohongshu.com/"
+    if "xhscdn.com" in (parsed.hostname or "") or "sns-webpic" in (parsed.hostname or ""):
+        referer = "https://www.xiaohongshu.com/"
+
+    # 使用图片专用请求头
+    headers = {
+        **PROXY_HEADERS,
+        "Referer": referer,
+    }
 
     async with httpx.AsyncClient(
-        headers=HEADERS,
+        headers=headers,
         follow_redirects=True,
         timeout=60.0,
     ) as client:
         try:
             resp = await client.get(url)
             resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (403, 401):
+                return JSONResponse(
+                    status_code=502,
+                    content={
+                        "message": "图片 CDN 拒绝访问，请尝试本地部署使用",
+                        "error": "blocked",
+                        "original_url": url,
+                    },
+                )
+            return JSONResponse(
+                status_code=502,
+                content={"message": f"代理请求图片失败: {str(e)}"},
+            )
         except httpx.HTTPError as e:
             return JSONResponse(
                 status_code=502,
@@ -313,6 +345,93 @@ async def proxy_image(url: str = Query(..., description="小红书图片地址")
         )
 
 
+@app.get("/api/export")
+async def download_zip(
+    data: str = Query(..., description="Base64编码的JSON数据"),
+):
+    """
+    接口三：打包下载（GET版本，避开POST拦截）
+    接收 base64 编码的 JSON: { "title": "笔记标题", "images": ["url1", "url2", ...] }
+    返回:   ZIP 文件
+    """
+    import base64
+    try:
+        json_str = base64.b64decode(data).decode("utf-8")
+        body = json.loads(json_str)
+    except Exception:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "参数格式错误"},
+        )
+
+    images = body.get("images", [])
+    title = body.get("title", "xiaohongshu_images")
+
+    if not images:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "图片列表为空"},
+        )
+
+    # 清理标题作为 ZIP 文件名
+    safe_title = re.sub(r'[\\/*?:"<>|]', "", title).strip() or "xiaohongshu_images"
+
+    # 在内存中构建 ZIP
+    zip_buffer = io.BytesIO()
+
+    async with httpx.AsyncClient(
+        headers=HEADERS,
+        follow_redirects=True,
+        timeout=30.0,
+    ) as client:
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            used_names = set()
+
+            for idx, img_url in enumerate(images):
+                try:
+                    resp = await client.get(img_url)
+                    resp.raise_for_status()
+
+                    content_type = resp.headers.get("content-type", "")
+                    ext = ".jpg"
+                    if "png" in content_type:
+                        ext = ".png"
+                    elif "webp" in content_type:
+                        ext = ".webp"
+                    elif "gif" in content_type:
+                        ext = ".gif"
+
+                    base_name = f"IMG_{idx + 1:03d}"
+                    file_name = f"{base_name}{ext}"
+                    counter = 1
+                    while file_name in used_names:
+                        file_name = f"{base_name}_{counter}{ext}"
+                        counter += 1
+                    used_names.add(file_name)
+
+                    zf.writestr(file_name, resp.content)
+
+                except Exception as e:
+                    error_name = f"IMG_{idx + 1:03d}_error.txt"
+                    if error_name not in used_names:
+                        used_names.add(error_name)
+                        zf.writestr(error_name, f"下载失败: {img_url}\n错误: {str(e)}")
+
+    zip_data = zip_buffer.getvalue()
+
+    from urllib.parse import quote
+    encoded_title = quote(safe_title)
+    ascii_title = re.sub(r'[^\x20-\x7E]', '', safe_title) or "xiaohongshu_images"
+
+    return Response(
+        content=zip_data,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{ascii_title}.zip"; filename*=UTF-8\'\'{encoded_title}.zip',
+        },
+    )
+
+
 # ==================== 启动入口 ====================
 
 if __name__ == "__main__":
@@ -322,4 +441,4 @@ if __name__ == "__main__":
     print("  小红书高清主图下载器 - 后端服务已启动")
     print("  访问 http://127.0.0.1:8000 打开前端页面")
     print("=" * 50)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

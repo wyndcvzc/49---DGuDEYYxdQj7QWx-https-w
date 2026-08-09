@@ -8,3 +8,16 @@ node_modules/
 *.log
 
 .vercel
+.env*
+
+# 视频/图片素材和临时脚本
+video_assets/
+config/
+test_result.zip
+compose_video.py
+fast_compose.py
+make_assets.py
+make_blur.py
+parse_local.py
+parse_new.py
+

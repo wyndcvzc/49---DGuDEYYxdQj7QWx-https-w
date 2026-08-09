@@ -6,6 +6,7 @@
     <title>小红书高清主图下载器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     
     <style>
         @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
@@ -229,24 +230,14 @@
                 <div class="flex flex-col items-center gap-4">
                     <div class="flex gap-3">
                         <button
-                            id="downloadBtn"
-                            onclick="downloadImages()"
+                            id="zipDownloadBtn"
+                            onclick="downloadZip()"
                             class="btn-primary px-12 py-4 rounded-xl text-white font-semibold text-lg flex items-center gap-3"
                         >
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
                             </svg>
-                            <span>下载所有高清主图</span>
-                        </button>
-                        <button
-                            id="openBtn"
-                            onclick="openAllImages()"
-                            class="btn-secondary px-8 py-4 rounded-xl text-gray-300 font-semibold flex items-center gap-3 hover:text-white"
-                        >
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-                            </svg>
-                            <span>逐张打开图片</span>
+                            <span>打包下载 ZIP</span>
                         </button>
                     </div>
                     <!-- 进度条 -->
@@ -263,10 +254,6 @@
             </div>
         </div>
 
-        <!-- 底部版权 -->
-        <div class="mt-12 text-center text-gray-500 text-sm">
-            <p>仅供学习交流，请勿用于商业用途</p>
-        </div>
     </div>
 
     <script>
@@ -400,22 +387,6 @@
             }
         });
 
-        // 打开所有已下载图片（在新标签页）
-        function openAllImages() {
-            const selectedImages = getSelectedImages();
-            if (selectedImages.length === 0) return;
-
-            // 逐张在新标签页中打开，间隔 300ms 避免浏览器拦截
-            selectedImages.forEach(function(item, i) {
-                setTimeout(function() {
-                    const proxyUrl = "/api/proxy?url=" + encodeURIComponent(item.url);
-                    window.open(proxyUrl, "_blank");
-                }, i * 300);
-            });
-
-            showStatus("已在新标签页打开 " + selectedImages.length + " 张图片", "success");
-        }
-
         // 获取选中的图片
         function getSelectedImages() {
             const checkboxes = document.querySelectorAll(".image-checkbox:checked");
@@ -427,12 +398,12 @@
             });
         }
 
-        // 逐张下载图片到同一目录
-        async function downloadImages() {
+        // 打包下载 ZIP（前端本地打包，避开网络拦截）
+        async function downloadZip() {
             const selectedImages = getSelectedImages();
 
             if (selectedImages.length === 0) {
-                showStatus("请至少选择一张图片进行下载", "warning");
+                showStatus("请至少选择一张图片进行打包下载", "warning");
                 return;
             }
 
@@ -442,93 +413,108 @@
             }
 
             isDownloading = true;
-            const downloadBtn = document.getElementById("downloadBtn");
+            const zipBtn = document.getElementById("zipDownloadBtn");
             const progressContainer = document.getElementById("progressContainer");
             const progressBar = document.getElementById("progressBar");
             const progressText = document.getElementById("progressText");
             const progressPercent = document.getElementById("progressPercent");
 
-            downloadBtn.disabled = true;
-            downloadBtn.innerHTML = '<div class="loading-spinner"></div><span>下载中...</span>';
+            zipBtn.disabled = true;
+            zipBtn.innerHTML = '<div class="loading-spinner"></div><span>下载中...</span>';
             progressContainer.classList.remove("hidden");
 
-            let successCount = 0;
-            let failCount = 0;
-
-            // 辅助函数：触发单张图片下载
-            function triggerDownload(blob, fileName) {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                // 延迟释放 URL 确保下载已触发
-                setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
-            }
-
             try {
+                const title = document.getElementById("noteTitle").textContent || "xiaohongshu_images";
+                const zip = new JSZip();
+                let successCount = 0;
+                let failCount = 0;
+
                 for (let i = 0; i < selectedImages.length; i++) {
                     const item = selectedImages[i];
-                    const percent = Math.round(((i + 1) / selectedImages.length) * 100);
+                    const percent = Math.round(((i + 1) / selectedImages.length) * 90);
 
                     progressText.textContent = "正在下载第 " + (i + 1) + " / " + selectedImages.length + " 张图片...";
                     progressBar.style.width = percent + "%";
                     progressPercent.textContent = percent + "%";
 
                     try {
-                        const response = await axios.get("/api/proxy?url=" + encodeURIComponent(item.url), {
+                        const resp = await axios.get("/api/proxy?url=" + encodeURIComponent(item.url), {
                             responseType: "blob",
                             timeout: 60000
                         });
 
-                        // 生成文件名
-                        const urlParts = item.url.split("?")[0].split("/");
-                        let fileName = urlParts[urlParts.length - 1] || "image_" + (item.index + 1);
-                        if (!fileName.includes(".")) {
-                            fileName += ".jpg";
-                        }
-                        const extension = fileName.split(".").pop() || "jpg";
-                        fileName = "IMG_" + String(item.index + 1).padStart(3, "0") + "." + extension;
-
-                        triggerDownload(response.data, fileName);
+                        const ext = getImageExtension(item.url, resp.headers.get("content-type", ""));
+                        const fileName = "IMG_" + String(i + 1).padStart(3, "0") + "." + ext;
+                        zip.file(fileName, resp.data);
                         successCount++;
-
-                        // 每张图片间隔 400ms，避免浏览器同时触发太多下载
-                        await new Promise(function(resolve) { setTimeout(resolve, 400); });
                     } catch (err) {
-                        console.warn("图片 " + (item.index + 1) + " 下载失败:", err.message);
-                        failCount++;
+                        // 代理失败时，尝试直接获取图片（可能被 CORS 阻止）
+                        try {
+                            const directResp = await axios.get(item.url, {
+                                responseType: "blob",
+                                timeout: 30000,
+                                headers: { "Referer": "https://www.xiaohongshu.com/" }
+                            });
+                            const ext = getImageExtension(item.url, directResp.headers.get("content-type", ""));
+                            const fileName = "IMG_" + String(i + 1).padStart(3, "0") + "." + ext;
+                            zip.file(fileName, directResp.data);
+                            successCount++;
+                        } catch (err2) {
+                            failCount++;
+                        }
                     }
                 }
 
+                progressText.textContent = "正在打包 ZIP 文件...";
+                progressBar.style.width = "95%";
+                progressPercent.textContent = "95%";
+
+                const blob = await zip.generateAsync({ type: "blob" });
+
                 progressBar.style.width = "100%";
+                progressText.textContent = "打包完成！";
                 progressPercent.textContent = "100%";
 
+                const asciiTitle = title.replace(/[^\x20-\x7E]/g, "") || "xiaohongshu_images";
+                const blobUrl = URL.createObjectURL(blob);
+                
+                // 直接在新标签页打开，不触发下载提示
+                window.open(blobUrl, "_blank");
+                
+                setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 10000);
+
                 showStatus(
-                    "下载完成！成功 " + successCount + " 张" + (failCount > 0 ? "，失败 " + failCount + " 张" : "") + "，正在打开图片...",
+                    "打包完成！成功 " + successCount + " 张" + (failCount > 0 ? "，失败 " + failCount + " 张" : ""),
                     failCount > 0 ? "warning" : "success"
                 );
 
-                // 下载完成后自动在新标签页打开所有图片
-                setTimeout(function() {
-                    openAllImages();
-                }, 500);
-
             } catch (err) {
-                console.error("下载失败:", err);
-                showStatus("下载失败：" + (err.message || "未知错误"), "error");
+                console.error("打包下载失败:", err);
+                showStatus("打包下载失败：" + (err.message || "未知错误"), "error");
             } finally {
                 isDownloading = false;
-                downloadBtn.disabled = false;
-                downloadBtn.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg><span>下载所有高清主图</span>';
+                zipBtn.disabled = false;
+                zipBtn.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg><span>打包下载 ZIP</span>';
 
-                setTimeout(() => {
+                setTimeout(function() {
                     progressContainer.classList.add("hidden");
                     progressBar.style.width = "0%";
                 }, 2000);
             }
+        }
+
+        // 根据 URL 或 Content-Type 推断文件扩展名
+        function getImageExtension(url, contentType) {
+            if (contentType.includes("png")) return "png";
+            if (contentType.includes("webp")) return "webp";
+            if (contentType.includes("gif")) return "gif";
+            if (contentType.includes("jpeg") || contentType.includes("jpg")) return "jpg";
+            // 从 URL 推断
+            const match = url.match(/\.(\w+)(?:\?|$)/);
+            if (match && ["jpg", "jpeg", "png", "webp", "gif"].includes(match[1].toLowerCase())) {
+                return match[1].toLowerCase() === "jpeg" ? "jpg" : match[1].toLowerCase();
+            }
+            return "jpg";
         }
 
         // 回车键快速解析
