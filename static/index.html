@@ -193,8 +193,8 @@
                     <div class="p-3 text-center">免费版</div>
                     <div class="p-3 text-center text-yellow-400">PRO 版</div>
                 </div>
-                <div class="grid grid-cols-3 border-t border-white/5"><div class="p-3 text-gray-400">每日解析</div><div class="p-3 text-center">5 次</div><div class="p-3 text-center text-green-400">∞ 无限</div></div>
-                <div class="grid grid-cols-3 border-t border-white/5"><div class="p-3 text-gray-400">每日打包下载</div><div class="p-3 text-center">3 次</div><div class="p-3 text-center text-green-400">∞ 无限</div></div>
+                <div class="grid grid-cols-3 border-t border-white/5"><div class="p-3 text-gray-400">每日解析</div><div class="p-3 text-center">1 次</div><div class="p-3 text-center text-green-400">∞ 无限</div></div>
+                <div class="grid grid-cols-3 border-t border-white/5"><div class="p-3 text-gray-400">每日打包下载</div><div class="p-3 text-center">1 次</div><div class="p-3 text-center text-green-400">∞ 无限</div></div>
                 <div class="grid grid-cols-3 border-t border-white/5"><div class="p-3 text-gray-400">高清无水印</div><div class="p-3 text-center">✅</div><div class="p-3 text-center">✅</div></div>
                 <div class="grid grid-cols-3 border-t border-white/5"><div class="p-3 text-gray-400">永久使用</div><div class="p-3 text-center">-</div><div class="p-3 text-center text-green-400">✅</div></div>
             </div>
@@ -356,8 +356,8 @@
             machineId: "",
             activation: "",
             activated: false,
-            remainParse: 5,
-            remainZip: 3,
+            remainParse: 1,
+            remainZip: 1,
         };
 
         // 生成简单的浏览器指纹（纯前端，不依赖外部库）
@@ -466,8 +466,8 @@
                     if (resp.data && resp.data.success) {
                         authState.machineId = resp.data.machine_id;
                         authState.activated = !!resp.data.activated;
-                        authState.remainParse = typeof resp.data.remain_parse === "number" ? resp.data.remain_parse : 5;
-                        authState.remainZip = typeof resp.data.remain_zip === "number" ? resp.data.remain_zip : 3;
+                        authState.remainParse = typeof resp.data.remain_parse === "number" ? resp.data.remain_parse : 1;
+                        authState.remainZip = typeof resp.data.remain_zip === "number" ? resp.data.remain_zip : 1;
                         saveAuthState();
                     }
                 } catch (e) {

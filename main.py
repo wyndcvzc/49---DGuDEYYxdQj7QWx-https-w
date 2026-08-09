@@ -29,8 +29,8 @@ app = FastAPI(title="XHS Downloader API")
 
 # ==================== Freemium 配置 ====================
 ACTIVATION_PREFIX = "XHSDL-"        # 必须与算号器 prefix 一致
-FREE_DAILY_PARSE_LIMIT = 5          # 免费版：每天解析次数
-FREE_DAILY_ZIP_LIMIT = 3            # 免费版：每天 ZIP 下载次数
+FREE_DAILY_PARSE_LIMIT = 1          # 免费版：每天解析次数
+FREE_DAILY_ZIP_LIMIT = 1            # 免费版：每天 ZIP 下载次数
 
 # 内存存储（生产环境可替换为 Redis）
 # key: machine_id -> {"parse_count": int, "zip_count": int, "date": "YYYY-MM-DD", "activated": bool}
