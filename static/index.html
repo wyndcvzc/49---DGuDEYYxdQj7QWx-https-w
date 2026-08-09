@@ -254,6 +254,53 @@
             </div>
         </div>
 
+        <!-- 变现组件：广告位 + 赞赏 + 微信群 -->
+        <div class="mt-12 max-w-2xl mx-auto space-y-6">
+
+            <!-- 广告位（替换为 Adsterra / AdSense 代码） -->
+            <div class="glass-card rounded-2xl p-5 text-center">
+                <p class="text-[10px] uppercase tracking-wider text-gray-600 mb-3">Advertisement</p>
+                <div id="ad-slot" class="min-h-[90px] flex items-center justify-center text-gray-500 text-sm border border-dashed border-white/10 rounded-xl">
+                    <!-- 替换为 Adsterra 脚本：
+                         <script type="text/javascript" src="//pl00000.profitabledisplaynetwork.com/abc/123/invoke.js"></script>
+                         或 Google AdSense <ins class="adsbygoogle" ...>
+                    -->
+                    广告位（Adsterra / AdSense）
+                </div>
+            </div>
+
+            <!-- 赞赏 + 微信群 -->
+            <div class="grid grid-cols-2 gap-4">
+                <button id="rewardBtn" class="glass-card rounded-2xl p-5 hover:bg-white/5 transition text-left">
+                    <div class="text-3xl mb-2">☕</div>
+                    <div class="text-white font-medium">请作者喝杯咖啡</div>
+                    <div class="text-xs text-gray-500 mt-1">支持项目持续维护</div>
+                </button>
+                <button id="groupBtn" class="glass-card rounded-2xl p-5 hover:bg-white/5 transition text-left">
+                    <div class="text-3xl mb-2">💬</div>
+                    <div class="text-white font-medium">加入用户群</div>
+                    <div class="text-xs text-gray-500 mt-1">获取更新 / 提需求</div>
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 二维码弹窗 -->
+    <div id="qrModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="glass-card rounded-3xl p-8 max-w-sm w-full text-center relative">
+            <button id="closeModal" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl leading-none">×</button>
+            <h3 id="modalTitle" class="text-xl font-semibold text-white mb-4"></h3>
+            <div class="bg-white rounded-2xl p-4 mb-4">
+                <img id="modalQr" src="" alt="二维码" class="w-full h-auto" />
+            </div>
+            <p id="modalDesc" class="text-sm text-gray-400"></p>
+            <div id="modalWechat" class="hidden mt-3 text-sm text-gray-300 items-center justify-center">
+                <span>微信号：</span>
+                <code class="bg-white/10 px-2 py-1 rounded text-red-300" id="wechatId"></code>
+                <button id="copyWechat" class="ml-2 text-red-400 hover:text-red-300 underline">复制</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -534,6 +581,76 @@
                 }
             } catch (err) {
                 // 忽略剪贴板访问错误
+            }
+        });
+
+        // ===== 变现组件交互 =====
+        // 配置：替换 qr 为你的实际二维码图片路径，wechat 为群主微信号
+        const MONETIZE_CONFIG = {
+            reward: {
+                title: '请作者喝杯咖啡 ❤️',
+                qr: '/static/qr-reward.jpg',
+                desc: '扫一扫，请作者喝杯咖啡，支持本项目持续维护',
+                wechat: null,
+            },
+            group: {
+                title: '加入用户群 💬',
+                qr: '/static/qr-group.jpg',
+                desc: '扫码进群，获取功能更新 / 提需求 / 反馈问题',
+                wechat: 'wxid_48h12qfswqlm22',
+            },
+        };
+
+        const qrModal = document.getElementById('qrModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalQr = document.getElementById('modalQr');
+        const modalDesc = document.getElementById('modalDesc');
+        const modalWechat = document.getElementById('modalWechat');
+        const wechatIdEl = document.getElementById('wechatId');
+
+        function openMonetizeModal(type) {
+            const cfg = MONETIZE_CONFIG[type];
+            modalTitle.textContent = cfg.title;
+            modalQr.src = cfg.qr;
+            modalQr.onerror = function() {
+                this.style.display = 'none';
+                modalDesc.innerHTML = '<span class="text-yellow-400">⚠️ 二维码图片未配置</span><br>请在 <code>static/index.html</code> 的 <code>MONETIZE_CONFIG</code> 中替换 <code>qr</code> 字段';
+            };
+            modalQr.style.display = '';
+            modalDesc.textContent = cfg.desc;
+            if (cfg.wechat) {
+                modalWechat.classList.remove('hidden');
+                modalWechat.classList.add('flex');
+                wechatIdEl.textContent = cfg.wechat;
+            } else {
+                modalWechat.classList.add('hidden');
+                modalWechat.classList.remove('flex');
+            }
+            qrModal.classList.remove('hidden');
+            qrModal.classList.add('flex');
+        }
+
+        function closeMonetizeModal() {
+            qrModal.classList.add('hidden');
+            qrModal.classList.remove('flex');
+        }
+
+        document.getElementById('rewardBtn').addEventListener('click', () => openMonetizeModal('reward'));
+        document.getElementById('groupBtn').addEventListener('click', () => openMonetizeModal('group'));
+        document.getElementById('closeModal').addEventListener('click', closeMonetizeModal);
+        qrModal.addEventListener('click', (e) => {
+            if (e.target === qrModal) closeMonetizeModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !qrModal.classList.contains('hidden')) closeMonetizeModal();
+        });
+
+        document.getElementById('copyWechat').addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(wechatIdEl.textContent);
+                showStatus('微信号已复制，去微信添加好友吧', 'success');
+            } catch (err) {
+                showStatus('复制失败，请手动选择复制', 'error');
             }
         });
     </script>
